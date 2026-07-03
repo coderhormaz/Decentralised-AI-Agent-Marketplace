@@ -1,4 +1,4 @@
-import { supabase } from './supabase';
+import { getSupabaseClient } from './supabase';
 
 export interface ProxyEntry {
   id: string;
@@ -31,6 +31,7 @@ export interface ModelEntry {
 // ── Proxies ─────────────────────────────────────────────────
 
 export async function listProxies(): Promise<ProxyEntry[]> {
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('proxies')
     .select('*, proxy_models(*)')
@@ -41,6 +42,7 @@ export async function listProxies(): Promise<ProxyEntry[]> {
 }
 
 export async function getProxy(ensName: string): Promise<ProxyEntry | null> {
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('proxies')
     .select('*, proxy_models(*)')
@@ -52,6 +54,7 @@ export async function getProxy(ensName: string): Promise<ProxyEntry | null> {
 }
 
 export async function getProxyById(id: string): Promise<ProxyEntry | null> {
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('proxies')
     .select('*, proxy_models(*)')
@@ -70,6 +73,7 @@ export async function registerProxy(entry: {
   api_key?: string;
   api_endpoint?: string;
 }): Promise<ProxyEntry> {
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('proxies')
     .insert({
@@ -88,6 +92,7 @@ export async function registerProxy(entry: {
 }
 
 export async function updateProxyStatus(id: string, status: string): Promise<void> {
+  const supabase = getSupabaseClient();
   const { error } = await supabase
     .from('proxies')
     .update({ status, updated_at: new Date().toISOString() })
@@ -107,6 +112,7 @@ export async function addModel(model: {
   price_per_1k_output: number;
   max_context_tokens?: number;
 }): Promise<ModelEntry> {
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('proxy_models')
     .insert(model)
@@ -118,11 +124,13 @@ export async function addModel(model: {
 }
 
 export async function removeModel(modelId: string): Promise<void> {
+  const supabase = getSupabaseClient();
   const { error } = await supabase.from('proxy_models').delete().eq('id', modelId);
   if (error) throw error;
 }
 
 export async function listAllModels(): Promise<ModelEntry[]> {
+  const supabase = getSupabaseClient();
   const { data, error } = await supabase
     .from('proxy_models')
     .select('*')
@@ -141,6 +149,7 @@ export async function logTransaction(tx: {
   amount_usdc: number;
   buyer_address?: string;
 }): Promise<void> {
+  const supabase = getSupabaseClient();
   // Store tx_hash in lowercase for consistent replay lookups
   await supabase.from('transactions').insert({
     ...tx,
@@ -180,6 +189,7 @@ export async function logTransaction(tx: {
 }
 
 export async function getStats() {
+  const supabase = getSupabaseClient();
   const { count: proxyCount } = await supabase
     .from('proxies')
     .select('*', { count: 'exact', head: true })

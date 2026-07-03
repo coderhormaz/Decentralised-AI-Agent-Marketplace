@@ -1,7 +1,7 @@
 import { Request, Response, NextFunction } from 'express';
 import { config } from '../config';
 import { listAllModels } from '../services/registry';
-import { supabase } from '../services/supabase';
+import { getSupabaseClient, isSupabaseConfigured } from '../services/supabase';
 import { verifyPayment } from '../utils/verifier';
 import { logTransaction } from '../services/registry';
 
@@ -29,7 +29,7 @@ export async function x402Middleware(
     }
 
     // Look up model in DB for pricing
-    const allModels = await listAllModels();
+    const allModels = isSupabaseConfigured ? await listAllModels() : [];
     const match = allModels.find(m => m.model_id === requestedModel);
 
     // Calculate cost
@@ -40,18 +40,23 @@ export async function x402Middleware(
       costPerRequest =
         parseFloat(String(match.price_per_1k_input)) +
         parseFloat(String(match.price_per_1k_output));
-      // Get the proxy's wallet and API credentials
-      const { data: proxy } = await supabase
-        .from('proxies')
-        .select('wallet_address, api_key, api_endpoint')
-        .eq('id', match.proxy_id)
-        .single();
-      recipient = proxy?.wallet_address || config.fallback.recipient;
-      // Attach proxy credentials for the route handler
-      (req as any)._proxyCreds = {
-        api_key: proxy?.api_key || '',
-        api_endpoint: proxy?.api_endpoint || '',
-      };
+      if (isSupabaseConfigured) {
+        const supabase = getSupabaseClient();
+        // Get the proxy's wallet and API credentials
+        const { data: proxy } = await supabase
+          .from('proxies')
+          .select('wallet_address, api_key, api_endpoint')
+          .eq('id', match.proxy_id)
+          .single();
+        recipient = proxy?.wallet_address || config.fallback.recipient;
+        // Attach proxy credentials for the route handler
+        (req as any)._proxyCreds = {
+          api_key: proxy?.api_key || '',
+          api_endpoint: proxy?.api_endpoint || '',
+        };
+      } else {
+        recipient = config.fallback.recipient;
+      }
     } else {
       // Model not in DB — use fallback pricing but still allow it
       costPerRequest =
@@ -64,7 +69,8 @@ export async function x402Middleware(
     if (costPerRequest <= 0) {
       console.log(`[x402] Free model "${requestedModel}" — skipping payment.`);
       // Still attach creds for free models
-      if (!(req as any)._proxyCreds && match) {
+      if (isSupabaseConfigured && !(req as any)._proxyCreds && match) {
+        const supabase = getSupabaseClient();
         const { data: px } = await supabase.from('proxies').select('api_key, api_endpoint').eq('id', match.proxy_id).single();
         (req as any)._proxyCreds = { api_key: px?.api_key || '', api_endpoint: px?.api_endpoint || '' };
       }
@@ -104,19 +110,22 @@ export async function x402Middleware(
     }
 
     // Check DB-based replay guard (survives restarts, works across instances)
-    const { data: existingTx } = await supabase
-      .from('transactions')
-      .select('id')
-      .eq('tx_hash', paymentProof.toLowerCase())
-      .maybeSingle();
+    if (isSupabaseConfigured) {
+      const supabase = getSupabaseClient();
+      const { data: existingTx } = await supabase
+        .from('transactions')
+        .select('id')
+        .eq('tx_hash', paymentProof.toLowerCase())
+        .maybeSingle();
 
-    if (existingTx) {
-      console.warn(`[x402] Replay blocked (DB): ${paymentProof}`);
-      res.status(402).json({
-        error: 'Payment verification failed',
-        message: 'This transaction has already been used. Please send a new payment.',
-      });
-      return;
+      if (existingTx) {
+        console.warn(`[x402] Replay blocked (DB): ${paymentProof}`);
+        res.status(402).json({
+          error: 'Payment verification failed',
+          message: 'This transaction has already been used. Please send a new payment.',
+        });
+        return;
+      }
     }
 
     // Verify on-chain
@@ -133,12 +142,14 @@ export async function x402Middleware(
     }
 
     // Log the transaction
-    await logTransaction({
-      tx_hash: paymentProof,
-      proxy_id: match?.proxy_id,
-      model_id: requestedModel,
-      amount_usdc: costPerRequest,
-    }).catch(e => console.warn('[x402] Failed to log tx:', e.message));
+    if (isSupabaseConfigured) {
+      await logTransaction({
+        tx_hash: paymentProof,
+        proxy_id: match?.proxy_id,
+        model_id: requestedModel,
+        amount_usdc: costPerRequest,
+      }).catch(e => console.warn('[x402] Failed to log tx:', e.message));
+    }
 
     console.log(`[x402] ✅ Payment accepted for ${requestedModel}. Forwarding to AI.`);
     next();

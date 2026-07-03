@@ -4,6 +4,7 @@ import path from 'path';
 import { config } from './config';
 import { x402Middleware } from './middleware/x402';
 import { proxyChatCompletion } from './services/ai';
+import { isSupabaseConfigured } from './services/supabase';
 import {
   getProxyMetadata,
   normalizeEnsName,
@@ -246,7 +247,7 @@ app.listen(config.port, () => {
   console.log(`  ║  Port:      ${String(config.port).padEnd(33)}║`);
   console.log(`  ║  Network:   Base Sepolia (${config.baseSepolia.chainId})${' '.repeat(15)}║`);
   console.log(`  ║  ENS:       ${(config.proxySellerEns || 'fallback mode').padEnd(33)}║`);
-  console.log(`  ║  Supabase:  connected                       ║`);
+  console.log(`  ║  Supabase:  ${(isSupabaseConfigured ? 'connected' : 'disabled').padEnd(33)}║`);
   console.log('  ╚══════════════════════════════════════════════╝');
   console.log('');
 });
