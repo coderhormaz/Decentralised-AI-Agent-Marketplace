@@ -1,4 +1,4 @@
-# ChainAgent ⚡
+# Decentralised AI Agent Marketplace
 
 > **Decentralised AI Agent Marketplace** — AI agents pay-per-query in USDC on Base via x402 micropayments. ENS-powered discovery, no KYC, no subscriptions.
 
